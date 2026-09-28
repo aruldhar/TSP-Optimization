@@ -1,57 +1,57 @@
-# Traveling Salesman Problem (TSP) — Heuristic Pipeline (Nearest Neighbor + Multi-Start + 2-Opt)
+# Traveling Salesman Problem: a 13,509-City Heuristic Pipeline
 
-This repository contains my ISEN 320 (Operations Research I) final project implementation for solving a large Traveling Salesman Problem (TSP) instance using a scalable heuristic pipeline:
+A heuristic pipeline for the 13,509-city `usa13509` TSP instance (every U.S. city with population of at least 500), built as the final project for ISEN 320 (Operations Research I) at Texas A&M, December 2025.
 
-1) **Nearest Neighbor (NN)** tour construction  
-2) **Multi-start initialization** to reduce dependence on starting city  
-3) **2-opt (best-improvement)** local search applied to top NN tours with a pass cap to control runtime  
+**Team:** Arul Dhar and Zakaria Majidi
 
-The full report is included in [Final Report](docs/ISEN_320_Final_Project.pdf).
+## Results
 
-## Repo Structure
-- src/ Python source code
-- data/ Input dataset(s)
-- results/ Output files (tours, best tour, etc.)
-- docs/ Project report PDF
+| Stage | Tour length | Notes |
+| --- | --- | --- |
+| Nearest neighbor, 104 diverse starts | 24,985,586 (best) to 25,366,391 (worst), mean 25,209,350 | About 15 s per start; about 25 min for all 104 |
+| Best-improvement 2-opt on the 10 shortest NN tours (5 passes each) | **24,573,793** | 1.8% shorter than its starting tour |
+| Published optimal tour ([Waterloo TSP](https://www.math.uwaterloo.ca/tsp/usa13509/usa13509_sol.html)) | 19,982,859 | Our best tour is about 23% above optimal |
 
-## Quick Start
+The best final tour came from starting tour #4, not from the shortest nearest-neighbor tour. The best starting point is not always the best tour to improve, which is why the pipeline runs 2-opt on the top 10 rather than only the single best.
 
-### Run the full pipeline (recommended)
-From the repository root:
+## Approach
 
-python src/run_pipeline.py
+1. **Formulation.** The report writes the TSP as a binary integer program (a binary variable per directed edge, enter-once and leave-once constraints, and subtour elimination) and explains why branch-and-bound is exact but impractical at this size.
+2. **Nearest neighbor (NN) construction.** From a start city, repeatedly visit the closest unvisited city. One run is O(n²), about 15 seconds here.
+3. **Multi-start with diverse starting cities.** Running NN from all 13,509 cities would take days of CPU time. Instead, the pipeline picks the 4 extreme cities (min/max x and y) plus the 25 cities farthest from each: 104 starts spread across the map.
+4. **Best-improvement 2-opt.** Each pass checks every pair of edges and applies the single swap that shortens the tour most.
 
-### Run steps manually (optional)
+### A design decision worth noting
+
+Uncapped best-improvement 2-opt ran for hours on this instance. A first-improvement variant was much faster, but even at 100 passes it converged to worse tours than 3 passes of best-improvement. The final design keeps best-improvement for quality and adds a `max_passes` cap (5) to control runtime, applied only to the 10 shortest NN tours.
+
+## Repository structure
+
+| Path | Contents |
+| --- | --- |
+| `src/nearest_neighbor.py` | Reads the instance, selects the 104 starts, writes all NN tours |
+| `src/two_opt.py` | Best-improvement 2-opt with a pass cap on the 10 best NN tours |
+| `src/run_pipeline.py` | Runs both steps in order |
+| `data/usa13509.tsp` | TSPLIB instance (EUC_2D coordinates) |
+| `results/nearest_neighbor_tours.txt` | All 104 NN tours with their lengths |
+| `results/best_tour_found.txt` | Best tour after 2-opt |
+| `docs/ISEN_320_Final_Project.pdf` | Full report: formulation, branch-and-bound, heuristic design, complexity |
+
+## Running it
+
+Python 3 standard library only; no packages to install.
+
+```bash
+python src/run_pipeline.py        # full pipeline
+# or step by step
 python src/nearest_neighbor.py
-
 python src/two_opt.py
+```
 
-## Inputs / Outputs
+Expect roughly 25 minutes for the nearest-neighbor stage on a typical laptop, plus the 2-opt passes.
 
-### Input
-data/usa13509.tsp — 13,509-city coordinate dataset
+## What could make it better
 
-### Outputs
-results/nearest_neighbor_tours.txt — NN tours generated from multiple starting cities with their total lengths
-
-results/best_tour_found.txt — best tour found after applying 2-opt to selected NN tours
-
-## Algorithm Overview
-
-### Nearest Neighbor (NN)
-Starting from a chosen city, repeatedly visit the nearest unvisited city until all cities are visited, then return to the start.
-
-### Multi-Start Strategy
-To avoid a single-start bias without running NN from every city, the pipeline uses a diverse set of starting cities (described in the report).
-
-### 2-Opt (Best Improvement)
-2-opt iteratively improves a tour by swapping two edges (reversing a segment) when it reduces total distance. A maximum number of passes is used to keep runtime manageable on large instances.
-
-## Report
-See `docs/ISEN_320_Final_Project.pdf` for:
-
-- TSP formulation as a Binary Integer Program (decision variables, constraints, subtour elimination)
-- Branch-and-bound (exact approach overview)
-- Heuristic design rationale and complexity discussion
-- Implementation details and results
-
+- Or-opt or 3-opt moves, or Lin-Kernighan, to escape 2-opt local optima
+- Neighbor lists (only testing swaps between nearby cities) to cut the O(n²) cost per pass
+- A vectorized or compiled implementation (NumPy or Numba) for faster passes
